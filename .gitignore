@@ -1,0 +1,10 @@
+.idea/
+.pio/
+__pycache__/
+BUILD/
+mbed-os/
+cmake-build-debug/
+CMakeLists.txt
+GettingStarted.html
+mbed_config.h
+*.py*
