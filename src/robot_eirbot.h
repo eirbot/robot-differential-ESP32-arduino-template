@@ -26,8 +26,8 @@
 #define SENSOR_RESOLUTION 0xFFFF
 #define WHEEL_RADIUS 0.036f // 3.6 cm
 #define WHEELS_DISTANCE 0.328f // distance between the two wheels of the differential robot
-#define PID_TETA_PRECISION DEG_TO_RAD(10) // 10° of precision
-#define PID_DV_PRECISION 0.05f // 5 cm of precision
+#define ANGULAR_PRECISION DEG_TO_RAD(10) // 10° of precision
+#define LINEAR_PRECISION 0.05f // 5 cm of precision
 
 void robot_goto(float x,
         float y,
@@ -39,6 +39,10 @@ void robot_goto(float x,
         float y,
         bool blocking = true,
         sixtron::RBDC_reference reference = sixtron::RBDC_reference::absolute);
+
+void robot_normal_speed();
+void robot_low_speed();
+void robot_high_speed();
 
 void start_eirbot_rbdc_control_thread();
 

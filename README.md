@@ -1,6 +1,6 @@
 # Robot Differential ESP32 Arduino & FreeRTOS Template
 
-This is a template to create a RBDC project for a differential robot, using PlatformIO and FreeRTOS framework, on es^ressif32 (ESP32) platform.
+This is a template to create a RBDC project for a differential robot, using PlatformIO and FreeRTOS framework, on espressif32 (ESP32) platform.
 
 > [!NOTE]
 >

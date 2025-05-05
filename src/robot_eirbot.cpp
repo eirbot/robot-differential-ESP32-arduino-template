@@ -30,6 +30,8 @@ const std::string rbdc_status[RBDC_MAX_STATUS] = {
 volatile int rbdc_result = sixtron::RBDC_status::RBDC_standby;
 volatile uint8_t task_update = 0; // uint8_t faster than bool ? to be confirmed
 
+sixtron::speed_profile default_linear_speeds, high_linear_speeds, low_linear_speeds;
+
 /* ######################  GOTO FUNCTIONS   ############################################ */
 
 // Be aware this is a blocking function by default
@@ -52,6 +54,18 @@ void robot_goto(float x, float y, bool blocking, sixtron::RBDC_reference referen
             delay(10);
         }
     }
+}
+
+void robot_normal_speed() {
+    rbdc->resetSpeedProfile(sixtron::speed_controller_type::linear);
+}
+
+void robot_high_speed() {
+    rbdc->setSpeedProfile(sixtron::speed_controller_type::linear, high_linear_speeds);
+}
+
+void robot_low_speed() {
+    rbdc->setSpeedProfile(sixtron::speed_controller_type::linear, low_linear_speeds);
 }
 
 /* ######################  RBDC CONTROL LOOP   ############################################ */
@@ -82,29 +96,72 @@ void control(void *pvParameters) {
     // Setup RBDC
     // TODO: update the values !!
     sixtron::RBDC_params rbdc_params;
-    rbdc_params.rbdc_format = sixtron::RBDC_format::two_wheels_robot;
-    rbdc_params.max_output_dv = 1.0f; // in [m/s]
-    rbdc_params.max_output_dtheta = 8.0f; // in [rad/s]
+    rbdc_params.rbdc_format = sixtron::RBDC_format::differential_robot;
+
+    // Set behaviors for linear and angular control loops
+    rbdc_params.linear_parameters.movement = sixtron::speed_movement_type::trapezoidal_only;
+    rbdc_params.angular_parameters.movement = sixtron::speed_movement_type::pid_only;
+
+    // TODO: you need to define at least one default speed profile.
+    default_linear_speeds.max_accel = 0.7;
+    default_linear_speeds.max_decel = 3.4;
+    default_linear_speeds.max_speed = 2.0f; // in [m/s]
+
+    // TODO: ... but you can create more if you want, it can be apply on the fly.
+    high_linear_speeds.max_accel = 1.4;
+    high_linear_speeds.max_decel = 4.0;
+    high_linear_speeds.max_speed = 2.0f;
+
+    low_linear_speeds.max_accel = 0.3;
+    low_linear_speeds.max_decel = 1.8;
+    low_linear_speeds.max_speed = 1.0f;
+
+    // Apply the default speed profile into RBDC parameters
+    rbdc_params.linear_parameters.default_speeds = default_linear_speeds;
+
+    // TODO: very important to fine tune these two value with the robot behavior
+    rbdc_params.linear_parameters.trapeze_tuning.pivot_gain = 0.100f; // See RBDC source code
+    rbdc_params.linear_parameters.trapeze_tuning.precision_gain = 0.2f; // must be between 0.0-1.0
+
+    // TODO: do the same for the angular controller
+    rbdc_params.angular_parameters.default_speeds.max_accel = 1.0f * M_PI_F;
+    rbdc_params.angular_parameters.default_speeds.max_decel = 4.0f * M_PI_F;
+    rbdc_params.angular_parameters.default_speeds.max_speed = 3.0f * M_PI_F; // in [rad/s]
+    rbdc_params.angular_parameters.trapeze_tuning.precision_gain = 0.1f; // if using trapeze on teta
+
+    // TODO: setup precisions
+    rbdc_params.linear_parameters.precision = LINEAR_PRECISION;
+    rbdc_params.angular_parameters.precision = ANGULAR_PRECISION;
+
+    // TODO: can the robot go backward?
     rbdc_params.can_go_backward = true;
     rbdc_params.dt_seconds = dt_pid;
-    rbdc_params.final_theta_precision = DEG_TO_RAD(3);
-    rbdc_params.moving_theta_precision = 10 * ONE_DEGREE_IN_RAD;
-    rbdc_params.target_precision = 3 * PID_DV_PRECISION;
-    rbdc_params.dv_precision = PID_DV_PRECISION;
 
-    // Theta, or angular speed, PID parameters
     // TODO: update the values !!
-    rbdc_params.pid_param_dteta.Kp = 1.0f;
-    rbdc_params.pid_param_dteta.Ki = 0.0f;
-    rbdc_params.pid_param_dteta.Kd = 0.0f;
-    rbdc_params.pid_param_dteta.ramp = 1.75f;
+    /* USE THIS BLOC ONLY IF LINEAR CONTROL MOVEMENT USE THE PID! */
+    if (rbdc_params.linear_parameters.movement == sixtron::speed_movement_type::pid_only
+            || rbdc_params.linear_parameters.movement
+                    == sixtron::speed_movement_type::trapezoidal_and_pid) {
+        rbdc_params.linear_parameters.pid_params.Kp = 2.0f;
+        rbdc_params.linear_parameters.pid_params.Ki = 0.1f;
+        rbdc_params.linear_parameters.pid_params.Kd = 0.25f;
 
-    // Dv, or linear speed, PID parameters
+        rbdc_params.linear_parameters.pid_params.ramp_high = 0.8f
+                / rbdc_params.linear_parameters.pid_params.Kp; // Not outputs accel / decel !!
+        rbdc_params.linear_parameters.pid_params.ramp_low
+                = 3.5f / rbdc_params.linear_parameters.pid_params.Kp;
+    }
+
     // TODO: update the values !!
-    rbdc_params.pid_param_dv.Kp = 2.0f;
-    rbdc_params.pid_param_dv.Ki = 0.1f;
-    rbdc_params.pid_param_dv.Kd = 0.25f;
-    // rbdc_params.pid_param_dv.ramp = 0.5f;
+    /* USE THIS BLOC ONLY IF ANGULAR CONTROL MOVEMENT USE THE PID! */
+    if (rbdc_params.angular_parameters.movement == sixtron::speed_movement_type::pid_only) {
+        // Theta, or angular speed, PID parameters
+        rbdc_params.angular_parameters.pid_params.Kp = 1.0f;
+        rbdc_params.angular_parameters.pid_params.Ki = 0.0f;
+        rbdc_params.angular_parameters.pid_params.Kd = 0.0f;
+        rbdc_params.angular_parameters.pid_params.ramp
+                = 20.0f / rbdc_params.angular_parameters.pid_params.Kp;
+    }
 
     rbdc = new sixtron::RBDC(odom, mobile_base, rbdc_params);
 
